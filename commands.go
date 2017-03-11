@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -35,4 +36,20 @@ func RunCommand(command string, args ...string) error {
 	}
 	fmt.Fprintf(os.Stderr, strings.Join(ret, "\n"))
 	return cmd.Wait()
+}
+
+func CommandCopy(src string, dst string) error {
+	// Many safety checks to perform here...
+	if runtime.GOOS == "windows" {
+		return RunCommand("copy", "/B", "/Y", "/L", src, dst)
+	}
+	return RunCommand("cp", src, dst)
+}
+
+func CommandMove(src string, dst string) error {
+	// Many safety checks to perform here...
+	if runtime.GOOS == "windows" {
+		return RunCommand("move", "/Y", src, dst)
+	}
+	return RunCommand("mv", src, dst)
 }
