@@ -5,23 +5,31 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
 func RunCommand(command string, args ...string) error {
 	var ret []string
-	shellarg := "-c"
+	var finalargs []string
 	shell, ok := os.LookupEnv("COMSPEC")
 	if ok {
-		shellarg = "/C"
+		finalargs = append([]string{"/C"}, command)
+		finalargs = append(finalargs, args...)
 	} else {
 		shell, ok = os.LookupEnv("SHELL")
 		if !ok {
 			shell = "/bin/sh"
 		}
+		for i, v := range args {
+			args[i] = strconv.Quote(v)
+		}
+		args = append([]string{command}, args...)
+		finalargs = []string{"-c", strings.Join(args, " ") + " 2>&1"}
 	}
-	finalargs := append([]string{shell, shellarg, command}, args...)
+	//fmt.Fprintf(os.Stderr, "Running command:\n>%s<\n>>%s<<\n", shell, strings.Join(finalargs, "<<\n>>"))
 	cmd := exec.Command(shell, finalargs...)
 
 	outp, err := cmd.StdoutPipe()
@@ -34,22 +42,43 @@ func RunCommand(command string, args ...string) error {
 		line := scanner.Text()
 		ret = append(ret, line)
 	}
-	fmt.Fprintf(os.Stderr, strings.Join(ret, "\n"))
-	return cmd.Wait()
+	err = cmd.Wait()
+	if err != nil {
+		return fmt.Errorf("%s: %s", err, strings.Join(ret, "\n"))
+	}
+	return nil
 }
 
 func CommandCopy(src string, dst string) error {
+	dst = filepath.Clean(dst)
+	if dst[len(dst)-1] == os.PathSeparator {
+		return fmt.Errorf("Copy to root folder %s not allowed for safety", dst)
+	}
+	dst += string(os.PathSeparator)
 	// Many safety checks to perform here...
 	if runtime.GOOS == "windows" {
 		return RunCommand("copy", "/B", "/Y", "/L", src, dst)
 	}
-	return RunCommand("cp", src, dst)
+	return RunCommand("cp", "-R", src, dst)
 }
 
 func CommandMove(src string, dst string) error {
+	dst = filepath.Clean(dst)
+	if dst[len(dst)-1] == os.PathSeparator {
+		return fmt.Errorf("Move to root folder %s not allowed for safety", dst)
+	}
+	dst += string(os.PathSeparator)
 	// Many safety checks to perform here...
 	if runtime.GOOS == "windows" {
 		return RunCommand("move", "/Y", src, dst)
 	}
-	return RunCommand("mv", src, dst)
+	return RunCommand("mv", "-f", src, dst)
+}
+
+func CommandDelete(src string) error {
+	// Many safety checks to perform here...
+	if runtime.GOOS == "windows" {
+		return RunCommand("del", "/S", src)
+	}
+	return RunCommand("rm", "-rf", src)
 }

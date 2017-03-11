@@ -112,6 +112,42 @@ func (p *Panel) Reset(cwd string, cursor string) error {
 	return err
 }
 
+// Refresh reinitializes a panel with its directory's contents,
+// keeping the current cursor and selection if possible
+func (p *Panel) Refresh() error {
+	if len(p.Entries) == 0 {
+		return p.Reset(p.Cwd, "")
+	}
+	var selection = make(map[string]bool)
+	top := p.Top
+	cursor := p.Entries[p.Cursor].Name()
+	cursorIndex := p.Cursor
+	for k := range p.Selected {
+		selection[p.Entries[k].Name()] = true
+	}
+	err := p.Reset(p.Cwd, cursor)
+	if len(p.Entries) == 0 {
+		return err
+	}
+	p.Top = top
+	if err != nil {
+		return err
+	}
+	if p.Entries[p.Cursor].Name() != cursor {
+		if cursorIndex < len(p.Entries) {
+			p.Cursor = cursorIndex
+		} else {
+			p.Cursor = len(p.Entries) - 1
+		}
+	}
+	for k, v := range p.Entries {
+		if selection[v.Name()] {
+			p.Selected[k] = true
+		}
+	}
+	return nil
+}
+
 func permc(c string, mode os.FileMode) string {
 	if mode != 0 {
 		return c[:1]
@@ -234,6 +270,7 @@ func setCachedCursor(key string, val string) {
 
 var lp, rp *Panel
 var ap *Panel
+var status string
 
 func redrawAll() int {
 	const coldef = termbox.ColorDefault
@@ -249,7 +286,12 @@ func redrawAll() int {
 	fill(0, h-2, w, 1, termbox.Cell{Ch: '─', Bg: termbox.ColorRed})
 	lp.Render(0, midx-1, h-2, lp == ap)
 	rp.Render(midx+1, w-midx-1, h-2, rp == ap)
-	tbprint(0, h-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav]")
+	if status != "" {
+		tbprint(0, h-1, termbox.ColorMagenta, coldef, status)
+	} else {
+		tbprint(0, h-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav]")
+	}
+	status = ""
 	termbox.Flush()
 
 	return h - 2
@@ -289,6 +331,25 @@ func writeConfig() error {
 }
 
 // ------------------
+
+func getCommandArguments() ([]string, string, *Panel) {
+	op := lp
+	if ap == lp {
+		op = rp
+	}
+	var src []string
+	dst := op.Cwd
+	if len(ap.Selected) > 0 {
+		for k := range ap.Selected {
+			f := ap.Entries[k]
+			src = append(src, filepath.Join(ap.Cwd, f.Name()))
+		}
+	} else if len(ap.Entries) > 0 {
+		f := ap.Entries[ap.Cursor]
+		src = append(src, filepath.Join(ap.Cwd, f.Name()))
+	}
+	return src, dst, op
+}
 
 func run(ld, rd string) {
 	err := termbox.Init()
@@ -348,14 +409,32 @@ mainloop:
 				switch ev.Ch {
 				case 'q':
 					break mainloop
-				case 'e':
-					op := lp
-					if ap == lp {
-						op = rp
+				case 'c':
+					src, dst, op := getCommandArguments()
+					for _, s := range src {
+						err := CommandCopy(s, dst)
+						if err != nil {
+							status = status + "," + err.Error()
+						}
 					}
-					for k := range ap.Selected {
-						f := ap.Entries[k]
-						RunCommand("echo", filepath.Join(ap.Cwd, f.Name()), op.Cwd)
+					op.Refresh()
+				case 'm':
+					src, dst, _ := getCommandArguments()
+					for _, s := range src {
+						err := CommandMove(s, dst)
+						if err != nil {
+							status = status + "," + err.Error()
+						}
+					}
+					lp.Refresh()
+					rp.Refresh()
+				case 'e':
+					src, dst, _ := getCommandArguments()
+					for _, s := range src {
+						err := RunCommand("echo", s, dst)
+						if err != nil {
+							status = status + "," + err.Error()
+						}
 					}
 				}
 			}
@@ -374,12 +453,10 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		viper.SetConfigFile(configFile)
 		viper.SetConfigType("json")
-		err := viper.ReadInConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error config file: %s \n", err)
-		}
+		// Ignore errors if config file does not exist.
+		viper.ReadInConfig()
+
 		cursorCache = viper.GetStringMapString("CursorCache")
-		fmt.Fprintf(os.Stderr, "cursorCache: %#v\n", cursorCache)
 		if len(args) < 2 {
 			d := viper.GetString("LeftPath")
 			if d == "" {
