@@ -348,6 +348,15 @@ mainloop:
 				switch ev.Ch {
 				case 'q':
 					break mainloop
+				case 'e':
+					op := lp
+					if ap == lp {
+						op = rp
+					}
+					for k := range ap.Selected {
+						f := ap.Entries[k]
+						RunCommand("echo", filepath.Join(ap.Cwd, f.Name()), op.Cwd)
+					}
 				}
 			}
 		case termbox.EventError:
