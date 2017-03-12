@@ -27,8 +27,14 @@ import (
 	"strings"
 )
 
+// RunShell runs an interactive shell.
+// Since the current program is still running, so may be
+// its coroutines, which will trigger all sorts of weirdness
+// For example, Ctrl-C may be caught by our Go runtime, killing us
+// but leaving the spawned shell still running, with I/O shared with
+// our parent (possibly another shell!). That's pretty ugly.
 func RunShell(cwd string) error {
-	pa := os.ProcAttr{
+	attr := os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 		Dir:   cwd,
 	}
@@ -41,11 +47,11 @@ func RunShell(cwd string) error {
 			shell = "/bin/sh"
 		}
 	}
-	proc, err := os.StartProcess(shell, args, &pa)
+	process, err := os.StartProcess(shell, args, &attr)
 	if err != nil {
 		return err
 	}
-	state, err := proc.Wait()
+	state, err := process.Wait()
 	if err != nil {
 		return err
 	}

@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/mitchellh/go-homedir"
@@ -162,6 +163,7 @@ func permc(c string, mode os.FileMode) string {
 
 func permissions(mode os.FileMode) string {
 	s := ""
+	//No hidden for you s = s + permc("H.", mode&os.ModeHidden)
 	s = s + permc("d.", mode&os.ModeDir)
 	s = s + permc("r-", mode&(1<<8))
 	s = s + permc("w-", mode&(1<<7))
@@ -226,7 +228,7 @@ func (p *Panel) Render(x, w, h int, active bool) {
 	if p.Cursor < len(p.Entries) {
 		e := p.Entries[p.Cursor]
 		fn := fmt.Sprintf("%s %s %d %s", permissions(e.Mode()), e.ModTime().Format("Mon, 02 Jan 2006 15:04:05"), e.Size(), e.Name())
-		tbprintw(nx+1, h, w, termbox.ColorYellow, termbox.ColorRed, fn)
+		tbprintw(nx+1, h, w-(nx+1-x), termbox.ColorYellow, termbox.ColorRed, fn)
 	}
 }
 
@@ -387,6 +389,31 @@ mainloop:
 		newCommand := ""
 		switch ev := termbox.PollEvent(); ev.Type {
 		case termbox.EventKey:
+			if prefixCommand == "b" {
+				drives, _ := GetDrives()
+				drive := unicode.ToUpper(ev.Ch)
+				if drives[drive] {
+					cwd := string(drive) + `:\`
+					ap.Reset(cwd, getCachedCursor(cwd))
+				}
+				break
+			} else if prefixCommand == "D" {
+				if ev.Ch == 'D' {
+					src, _ := getCommandArguments()
+					for i, s := range src {
+						redrawStatus(fmt.Sprintf("Deleting file %d/%d: %s", i+1, len(src), s))
+						err := CommandDelete(s)
+						if err != nil {
+							status = status + " " + err.Error()
+						}
+					}
+					ap.Refresh()
+					if ap.Cwd == op.Cwd {
+						op.Refresh()
+					}
+					break
+				}
+			}
 			if ev.Key == termbox.KeyEsc || ev.Ch == 'q' || ev.Ch == 'Q' {
 				if prefixCommand == "" {
 					break mainloop
@@ -442,6 +469,15 @@ mainloop:
 				status = runShell()
 				ap.Refresh()
 				op.Refresh()
+			} else if ev.Ch == 'b' {
+				if prefixCommand == "" {
+					if runtime.GOOS == "windows" {
+						status = "Press a drive letter or bookmark to cd to"
+					} else {
+						status = "Press a bookmark to cd to"
+					}
+					newCommand = "b"
+				}
 			} else if ev.Ch == 'c' {
 				if ap.Cwd == op.Cwd {
 					// Maybe add a way to duplicate files?
@@ -481,18 +517,6 @@ mainloop:
 				if prefixCommand == "" {
 					status = fmt.Sprintf("Press D again to confirm deleting %d files (%s)", len(src), strings.Join(src, " "))
 					newCommand = "D"
-				} else if prefixCommand == "D" {
-					for i, s := range src {
-						redrawStatus(fmt.Sprintf("Deleting file %d/%d: %s", i+1, len(src), s))
-						err := CommandDelete(s)
-						if err != nil {
-							status = status + " " + err.Error()
-						}
-					}
-					ap.Refresh()
-					if ap.Cwd == op.Cwd {
-						op.Refresh()
-					}
 				}
 			}
 		case termbox.EventError:
