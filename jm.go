@@ -35,14 +35,15 @@ import (
 
 // ------------------
 
-func tbprint(x, y int, fg, bg termbox.Attribute, msg string) {
+func tbprint(x, y int, fg, bg termbox.Attribute, msg string) int {
 	for _, c := range msg {
 		termbox.SetCell(x, y, c, fg, bg)
 		x += runewidth.RuneWidth(c)
 	}
+	return x
 }
 
-func tbprintw(x, y, w int, fg, bg termbox.Attribute, msg string) {
+func tbprintw(x, y, w int, fg, bg termbox.Attribute, msg string) int {
 	w += x
 	for _, c := range msg {
 		termbox.SetCell(x, y, c, fg, bg)
@@ -51,6 +52,7 @@ func tbprintw(x, y, w int, fg, bg termbox.Attribute, msg string) {
 			break
 		}
 	}
+	return x
 }
 
 func fill(x, y, w, h int, cell termbox.Cell) {
@@ -220,12 +222,12 @@ func (p *Panel) Render(x, w, h int, active bool) {
 
 		tbprintw(x, i, w, fg, bg, fn)
 	}
-	fn := p.Cwd
+	nx := tbprintw(x, h, w, termbox.ColorWhite, termbox.ColorRed, p.Cwd)
 	if p.Cursor < len(p.Entries) {
 		e := p.Entries[p.Cursor]
-		fn = fmt.Sprintf("%s %s %s %s %d", p.Cwd, permissions(e.Mode()), e.ModTime().Format("Mon, 02 Jan 2006 15:04:05"), e.Name(), e.Size())
+		fn := fmt.Sprintf("%s %s %d %s", permissions(e.Mode()), e.ModTime().Format("Mon, 02 Jan 2006 15:04:05"), e.Size(), e.Name())
+		tbprintw(nx+1, h, w, termbox.ColorYellow, termbox.ColorRed, fn)
 	}
-	tbprintw(x, h, w, termbox.ColorWhite, termbox.ColorRed, fn)
 }
 
 // ClampPos limits the state of the panel to valid values
@@ -282,19 +284,37 @@ func redrawAll() int {
 	lp.ClampPos(h - 2)
 	rp.ClampPos(h - 2)
 
-	fill(midx, 0, 1, h-2, termbox.Cell{Ch: '|', Fg: termbox.ColorRed})
-	fill(0, h-2, w, 1, termbox.Cell{Ch: '─', Bg: termbox.ColorRed})
-	lp.Render(0, midx-1, h-2, lp == ap)
+	fill(midx, 0, 1, h-2, termbox.Cell{Ch: ' ', Bg: termbox.ColorRed})
+	fill(0, h-2, w, 1, termbox.Cell{Ch: ' ', Bg: termbox.ColorRed})
+	lp.Render(0, midx, h-2, lp == ap)
 	rp.Render(midx+1, w-midx-1, h-2, rp == ap)
 	if status != "" {
 		tbprint(0, h-1, termbox.ColorMagenta, coldef, status)
 	} else {
-		tbprint(0, h-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav] [r refresh] [c Copy] [m Move] [DD Delete]") // [b/B Bookmarks] [k Mkdir]")
+		tbprint(0, h-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav] [r refresh] [c Copy] [m Move] [DD Delete] [: Shell]") // [b/B Bookmarks]")
 	}
 	status = ""
 	termbox.Flush()
 
 	return h - 2
+}
+
+func redrawStatus(status string) {
+	const coldef = termbox.ColorDefault
+	w, h := termbox.Size()
+	fill(0, h-1, w, 1, termbox.Cell{Ch: ' '})
+	tbprint(0, h-1, coldef, coldef, status)
+	termbox.Flush()
+}
+
+func runShell() string {
+	termbox.Close()
+	err := RunShell(ap.Cwd)
+	termbox.Init()
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // ------------------
@@ -367,34 +387,39 @@ mainloop:
 		newCommand := ""
 		switch ev := termbox.PollEvent(); ev.Type {
 		case termbox.EventKey:
-			switch ev.Key {
-			case termbox.KeyEsc:
+			if ev.Key == termbox.KeyEsc || ev.Ch == 'q' || ev.Ch == 'Q' {
 				if prefixCommand == "" {
 					break mainloop
 				}
-			case termbox.KeyTab:
+			} else if ev.Key == termbox.KeyTab {
 				ap, op = op, ap
-			case termbox.KeyArrowUp:
+			} else if ev.Key == termbox.KeyArrowUp || ev.Ch == 'k' {
 				ap.Cursor--
-			case termbox.KeyArrowDown:
+			} else if ev.Key == termbox.KeyArrowDown || ev.Ch == 'j' {
 				ap.Cursor++
-			case termbox.KeyPgup:
+			} else if ev.Key == termbox.KeyPgup || ev.Ch == 'u' {
 				ap.Cursor -= pagesize
-			case termbox.KeyPgdn:
+			} else if ev.Key == termbox.KeyPgdn || ev.Ch == 'i' {
 				ap.Cursor += pagesize
-			case termbox.KeyArrowLeft:
+			} else if ev.Key == termbox.KeyHome || ev.Ch == 'y' {
+				ap.Cursor = 0
+			} else if ev.Key == termbox.KeyEnd || ev.Ch == 'o' {
+				if len(ap.Entries) > 0 {
+					ap.Cursor = len(ap.Entries) - 1
+				}
+			} else if ev.Key == termbox.KeyArrowLeft || ev.Ch == 'h' {
 				if ap.Cursor < len(ap.Entries) {
 					setCachedCursor(ap.Cwd, ap.Entries[ap.Cursor].Name())
 					setCachedCursor(filepath.Dir(ap.Cwd), filepath.Base(ap.Cwd))
 				}
 				ap.Reset(filepath.Dir(ap.Cwd), getCachedCursor(filepath.Dir(ap.Cwd)))
-			case termbox.KeyArrowRight:
+			} else if ev.Key == termbox.KeyArrowRight || ev.Ch == 'l' {
 				if ap.Cursor < len(ap.Entries) && ap.Entries[ap.Cursor].IsDir() {
 					setCachedCursor(ap.Cwd, ap.Entries[ap.Cursor].Name())
 					n := filepath.Join(ap.Cwd, ap.Entries[ap.Cursor].Name())
 					ap.Reset(n, getCachedCursor(n))
 				}
-			case termbox.KeySpace:
+			} else if ev.Key == termbox.KeySpace {
 				if ap.Cursor < len(ap.Entries) {
 					if ap.Selected[ap.Cursor] {
 						delete(ap.Selected, ap.Cursor)
@@ -402,63 +427,71 @@ mainloop:
 						ap.Selected[ap.Cursor] = true
 					}
 				}
-			default:
-				switch ev.Ch {
-				case 'q':
-					if prefixCommand == "" {
-						break mainloop
+			} else if ev.Ch == 'a' {
+				if len(ap.Selected) == len(ap.Entries) {
+					ap.Selected = make(map[int]bool)
+				} else {
+					for i := range ap.Entries {
+						ap.Selected[i] = true
 					}
-				case 'r':
+				}
+			} else if ev.Key == termbox.KeyF5 || ev.Ch == 'r' {
+				ap.Refresh()
+				op.Refresh()
+			} else if ev.Ch == ':' {
+				status = runShell()
+				ap.Refresh()
+				op.Refresh()
+			} else if ev.Ch == 'c' {
+				if ap.Cwd == op.Cwd {
+					// Maybe add a way to duplicate files?
+					break
+				}
+				src, dst := getCommandArguments()
+				for i, s := range src {
+					redrawStatus(fmt.Sprintf("Copying file %d/%d: %s", i+1, len(src), s))
+					err := CommandCopy(s, dst)
+					if err != nil {
+						status = status + " " + err.Error()
+					}
+				}
+				op.Refresh()
+				if ap.Cwd == op.Cwd {
 					ap.Refresh()
-					op.Refresh()
-				case 'c':
-					if ap.Cwd == op.Cwd {
-						// Maybe add a way to duplicate files?
-						break
+				}
+			} else if ev.Ch == 'm' {
+				if ap.Cwd == op.Cwd {
+					break
+				}
+				src, dst := getCommandArguments()
+				for i, s := range src {
+					redrawStatus(fmt.Sprintf("Moving file %d/%d: %s", i+1, len(src), s))
+					err := CommandMove(s, dst)
+					if err != nil {
+						status = status + " " + err.Error()
 					}
-					src, dst := getCommandArguments()
-					for _, s := range src {
-						err := CommandCopy(s, dst)
+				}
+				ap.Refresh()
+				op.Refresh()
+			} else if ev.Ch == 'D' {
+				src, _ := getCommandArguments()
+				if len(src) == 0 {
+					break
+				}
+				if prefixCommand == "" {
+					status = fmt.Sprintf("Press D again to confirm deleting %d files (%s)", len(src), strings.Join(src, " "))
+					newCommand = "D"
+				} else if prefixCommand == "D" {
+					for i, s := range src {
+						redrawStatus(fmt.Sprintf("Deleting file %d/%d: %s", i+1, len(src), s))
+						err := CommandDelete(s)
 						if err != nil {
 							status = status + " " + err.Error()
 						}
 					}
-					op.Refresh()
-					if ap.Cwd == op.Cwd {
-						ap.Refresh()
-					}
-				case 'm':
-					if ap.Cwd == op.Cwd {
-						break
-					}
-					src, dst := getCommandArguments()
-					for _, s := range src {
-						err := CommandMove(s, dst)
-						if err != nil {
-							status = status + " " + err.Error()
-						}
-					}
 					ap.Refresh()
-					op.Refresh()
-				case 'D':
-					src, _ := getCommandArguments()
-					if len(src) == 0 {
-						break
-					}
-					if prefixCommand == "" {
-						status = fmt.Sprintf("Press D again to confirm deleting %d files (%s)", len(src), strings.Join(src, " "))
-						newCommand = "D"
-					} else if prefixCommand == "D" {
-						for _, s := range src {
-							err := CommandDelete(s)
-							if err != nil {
-								status = status + " " + err.Error()
-							}
-						}
-						ap.Refresh()
-						if ap.Cwd == op.Cwd {
-							op.Refresh()
-						}
+					if ap.Cwd == op.Cwd {
+						op.Refresh()
 					}
 				}
 			}

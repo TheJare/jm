@@ -27,6 +27,34 @@ import (
 	"strings"
 )
 
+func RunShell(cwd string) error {
+	pa := os.ProcAttr{
+		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		Dir:   cwd,
+	}
+	var args []string
+	shell, ok := os.LookupEnv("COMSPEC")
+	if !ok {
+		args = []string{"-i"}
+		shell, ok = os.LookupEnv("SHELL")
+		if !ok {
+			shell = "/bin/sh"
+		}
+	}
+	proc, err := os.StartProcess(shell, args, &pa)
+	if err != nil {
+		return err
+	}
+	state, err := proc.Wait()
+	if err != nil {
+		return err
+	}
+	if state.Success() {
+		return nil
+	}
+	return fmt.Errorf("<< Exited shell: %s", state.String())
+}
+
 // RunCommand executes the given command and arguments under the system'
 // default shell. Really only tested under CMD and ksh
 // If command fails, returns the system error and the output of the command
