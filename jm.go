@@ -269,7 +269,7 @@ func setCachedCursor(key string, val string) {
 // ------------------
 
 var lp, rp *Panel
-var ap *Panel
+var ap, op *Panel
 var status string
 
 func redrawAll() int {
@@ -289,7 +289,7 @@ func redrawAll() int {
 	if status != "" {
 		tbprint(0, h-1, termbox.ColorMagenta, coldef, status)
 	} else {
-		tbprint(0, h-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav]")
+		tbprint(0, h-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav] [r refresh] [c Copy] [m Move] [DD Delete]") // [b/B Bookmarks] [k Mkdir]")
 	}
 	status = ""
 	termbox.Flush()
@@ -332,11 +332,7 @@ func writeConfig() error {
 
 // ------------------
 
-func getCommandArguments() ([]string, string, *Panel) {
-	op := lp
-	if ap == lp {
-		op = rp
-	}
+func getCommandArguments() ([]string, string) {
 	var src []string
 	dst := op.Cwd
 	if len(ap.Selected) > 0 {
@@ -348,7 +344,7 @@ func getCommandArguments() ([]string, string, *Panel) {
 		f := ap.Entries[ap.Cursor]
 		src = append(src, filepath.Join(ap.Cwd, f.Name()))
 	}
-	return src, dst, op
+	return src, dst
 }
 
 func run(ld, rd string) {
@@ -361,22 +357,23 @@ func run(ld, rd string) {
 
 	lp, _ = NewPanel(ld, getCachedCursor(ld))
 	rp, _ = NewPanel(rd, getCachedCursor(rd))
-	ap = lp
+	ap, op = lp, rp
 
 	pagesize := redrawAll()
+	// Used by commands that work with multiple keystrokes, eg DD
+	prefixCommand := ""
 mainloop:
 	for {
+		newCommand := ""
 		switch ev := termbox.PollEvent(); ev.Type {
 		case termbox.EventKey:
 			switch ev.Key {
 			case termbox.KeyEsc:
-				break mainloop
-			case termbox.KeyTab:
-				if ap == lp {
-					ap = rp
-				} else {
-					ap = lp
+				if prefixCommand == "" {
+					break mainloop
 				}
+			case termbox.KeyTab:
+				ap, op = op, ap
 			case termbox.KeyArrowUp:
 				ap.Cursor--
 			case termbox.KeyArrowDown:
@@ -408,32 +405,59 @@ mainloop:
 			default:
 				switch ev.Ch {
 				case 'q':
-					break mainloop
+					if prefixCommand == "" {
+						break mainloop
+					}
+				case 'r':
+					ap.Refresh()
+					op.Refresh()
 				case 'c':
-					src, dst, op := getCommandArguments()
+					if ap.Cwd == op.Cwd {
+						// Maybe add a way to duplicate files?
+						break
+					}
+					src, dst := getCommandArguments()
 					for _, s := range src {
 						err := CommandCopy(s, dst)
 						if err != nil {
-							status = status + "," + err.Error()
+							status = status + " " + err.Error()
 						}
 					}
 					op.Refresh()
+					if ap.Cwd == op.Cwd {
+						ap.Refresh()
+					}
 				case 'm':
-					src, dst, _ := getCommandArguments()
+					if ap.Cwd == op.Cwd {
+						break
+					}
+					src, dst := getCommandArguments()
 					for _, s := range src {
 						err := CommandMove(s, dst)
 						if err != nil {
-							status = status + "," + err.Error()
+							status = status + " " + err.Error()
 						}
 					}
-					lp.Refresh()
-					rp.Refresh()
-				case 'e':
-					src, dst, _ := getCommandArguments()
-					for _, s := range src {
-						err := RunCommand("echo", s, dst)
-						if err != nil {
-							status = status + "," + err.Error()
+					ap.Refresh()
+					op.Refresh()
+				case 'D':
+					src, _ := getCommandArguments()
+					if len(src) == 0 {
+						break
+					}
+					if prefixCommand == "" {
+						status = fmt.Sprintf("Press D again to confirm deleting %d files (%s)", len(src), strings.Join(src, " "))
+						newCommand = "D"
+					} else if prefixCommand == "D" {
+						for _, s := range src {
+							err := CommandDelete(s)
+							if err != nil {
+								status = status + " " + err.Error()
+							}
+						}
+						ap.Refresh()
+						if ap.Cwd == op.Cwd {
+							op.Refresh()
 						}
 					}
 				}
@@ -442,6 +466,14 @@ mainloop:
 			panic(ev.Err)
 		}
 		pagesize = redrawAll()
+
+		// Keep prefix if one was stored by a command
+		if newCommand != "" {
+			prefixCommand = newCommand
+		} else {
+			prefixCommand = ""
+		}
+
 	}
 	writeConfig()
 }
@@ -471,6 +503,8 @@ var rootCmd = &cobra.Command{
 			}
 			args = append(args, d)
 		}
+		args[0], _ = filepath.Abs(args[0])
+		args[1], _ = filepath.Abs(args[1])
 		run(args[0], args[1])
 	},
 }
