@@ -276,6 +276,8 @@ var lp, rp *Panel
 var ap, op *Panel
 var status string
 
+var bookmarks map[string]string
+
 func redrawAll() int {
 	const coldef = termbox.ColorDefault
 	termbox.Clear(coldef, coldef)
@@ -327,6 +329,7 @@ type config struct {
 	LeftPath    string
 	RightPath   string
 	CursorCache map[string]string
+	Bookmarks   map[string]string
 }
 
 func writeConfig() error {
@@ -334,6 +337,7 @@ func writeConfig() error {
 	c.LeftPath = lp.Cwd
 	c.RightPath = rp.Cwd
 	c.CursorCache = cursorCache
+	c.Bookmarks = bookmarks
 
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
@@ -389,12 +393,28 @@ mainloop:
 		newCommand := ""
 		switch ev := termbox.PollEvent(); ev.Type {
 		case termbox.EventKey:
+
+			// Prefix commands
 			if prefixCommand == "b" {
 				drives, _ := GetDrives()
 				drive := unicode.ToUpper(ev.Ch)
+				newCwd := ""
 				if drives[drive] {
-					cwd := string(drive) + `:\`
-					ap.Reset(cwd, getCachedCursor(cwd))
+					newCwd = string(drive) + `:\`
+				} else if strings.IndexRune("0123456789", ev.Ch) >= 0 {
+					newCwd = bookmarks[string(ev.Ch)]
+				} else if ev.Ch == '/' {
+					newCwd = filepath.VolumeName(ap.Cwd) + string(os.PathSeparator)
+				} else if ev.Ch == '~' {
+					newCwd, _ = homedir.Dir()
+				}
+				if newCwd != "" {
+					ap.Reset(newCwd, getCachedCursor(newCwd))
+				}
+				break
+			} else if prefixCommand == "B" {
+				if strings.IndexRune("0123456789", ev.Ch) >= 0 {
+					bookmarks[string(ev.Ch)] = ap.Cwd
 				}
 				break
 			} else if prefixCommand == "D" {
@@ -411,9 +431,11 @@ mainloop:
 					if ap.Cwd == op.Cwd {
 						op.Refresh()
 					}
-					break
 				}
+				break
 			}
+
+			// Regular commands (or detecting prefixes)
 			if ev.Key == termbox.KeyEsc || ev.Ch == 'q' || ev.Ch == 'Q' {
 				if prefixCommand == "" {
 					break mainloop
@@ -478,6 +500,11 @@ mainloop:
 					}
 					newCommand = "b"
 				}
+			} else if ev.Ch == 'B' {
+				if prefixCommand == "" {
+					status = "Press digit to bookmark to"
+					newCommand = "B"
+				}
 			} else if ev.Ch == 'c' {
 				if ap.Cwd == op.Cwd {
 					// Maybe add a way to duplicate files?
@@ -511,10 +538,7 @@ mainloop:
 				op.Refresh()
 			} else if ev.Ch == 'D' {
 				src, _ := getCommandArguments()
-				if len(src) == 0 {
-					break
-				}
-				if prefixCommand == "" {
+				if len(src) > 0 {
 					status = fmt.Sprintf("Press D again to confirm deleting %d files (%s)", len(src), strings.Join(src, " "))
 					newCommand = "D"
 				}
@@ -535,17 +559,24 @@ mainloop:
 	writeConfig()
 }
 
+// ------------------
+
 var rootCmd = &cobra.Command{
 	Use:   "jm [left path] [right path]",
 	Short: "jm is a small terminal-based file manager",
 	Long:  `A simple and small terminal-based file manager that tries to be friendly`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Read config file
 		viper.SetConfigFile(configFile)
 		viper.SetConfigType("json")
 		// Ignore errors if config file does not exist.
 		viper.ReadInConfig()
 
 		cursorCache = viper.GetStringMapString("CursorCache")
+		bookmarks = viper.GetStringMapString("Bookmarks")
+
+		// Precedence to paths from the command line
+		// Cwd and $HOME as last resort defaults
 		if len(args) < 2 {
 			d := viper.GetString("LeftPath")
 			if d == "" {
@@ -562,6 +593,7 @@ var rootCmd = &cobra.Command{
 		}
 		args[0], _ = filepath.Abs(args[0])
 		args[1], _ = filepath.Abs(args[1])
+
 		run(args[0], args[1])
 	},
 }
@@ -570,6 +602,7 @@ func main() {
 	viper.SetDefault("LeftPath", "")
 	viper.SetDefault("RightPath", "")
 	viper.SetDefault("CursorCache", map[string]string{})
+	viper.SetDefault("Bookmarks", map[string]string{})
 	home, _ := homedir.Dir()
 	configFile = filepath.Join(home, ".jm")
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", configFile, "config file")
