@@ -49,9 +49,9 @@ File operations involving hidden, readonly or otherwise protected files may have
 
 `jm` is currently known to NOT run properly on at least the following environments:
 
-- Linux subsystem for Windows: crash on startup
-- Inside Mintty to a Cygwin/Msys shell: no display. (my use case was a Babun console)
-- `ssh` session from a ConEmu console on Windows, using Git/Msys's `ssh`: corrupted display and no control keys. (my use case was running `vagrant ssh` in a `Cmder` console). ConEmu has some experimental workarounds for msys/cygwin troubles, they may work for you.
+- Inside Mintty to a Cygwin/Msys shell: no display. This is expected, as Mintty does not provide a Windows console interface to native programs
+- `ssh` session to Ubuntu 16.04 from Windows using Git/Msys's `ssh`: corrupted display and no control keys. This seems a problem where termbox-go does not try to read terminal capabilities from `/lib/terminfo/`, where the cygwin database resides in Ubuntu. Doing `export TERMINFO=/lib/terminfo` before running `jm` seems to let it mostly work, but some corruption remains when resizing, and the cursor is never hidden. This is an easy fix in Termbox.
+- Linux subsystem for Windows: crash on startup. This seems due to WSL not supporting some fcntls (E_SETOWN/GETOWN) which Termbox requires to retrieve input via SIGIO. Once this is solved (either in WSL or by removing SIGIO from Termbox), the above TERMINFO issues may apply as well.
 
 I wrote `jm` to practice programming in Go, and to have a simple, portable and easy to build terminal file manager. It is clearly inspired by the likes of unix-focused Midnight Commander and vifm, but more adequate for my personal taste and use cases.
 

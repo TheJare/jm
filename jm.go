@@ -292,10 +292,15 @@ func redrawAll() int {
 	fill(0, h-2, w, 1, termbox.Cell{Ch: ' ', Bg: termbox.ColorRed})
 	lp.Render(0, midx, h-2, lp == ap)
 	rp.Render(midx+1, w-midx-1, h-2, rp == ap)
+
+	// HACK:
+	// Some terminals can't hide the cursor, which may mean that writing to the bottom rightmost
+	// character will cause the cursor to wrap to the next line and make the terminal scroll
+	// one line. This ruins the display! So use w-1 to prevent writing to that last char.
 	if status != "" {
-		tbprint(0, h-1, termbox.ColorMagenta, coldef, status)
+		tbprintw(0, h-1, w-1, termbox.ColorMagenta, coldef, status)
 	} else {
-		tbprint(0, h-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav] [r refresh] [c Copy] [m Move] [DD Delete] [: Shell]") // [b/B Bookmarks]")
+		tbprintw(0, h-1, w-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav] [r refresh] [c Copy] [m Move] [DD Delete] [: Shell] [b/B Bookmarks]")
 	}
 	status = ""
 	termbox.Flush()
