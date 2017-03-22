@@ -41,7 +41,7 @@ Operations targeting the root folder are aborted for safety reasons.
 
 ## Notes
 
-The shell invoked from `jm` should be considered unstable and used sparingly, due to technical reasons in the Go runtime. For example, I have found that `Ctrl-C` inside this shell is likely to kill `jm` and leave both the parent and child shells running simultaneously. There are likely other strange states lurking.
+The shell invoked from `jm` should be considered unstable and used sparingly, due to technical reasons in the Go runtime. For example, I have found that `Ctrl-C` inside this shell is likely to kill `jm` and leave both the parent and child shells running simultaneously. There are likely other strange states lurking that I haven't caught yet.
 
 File operations involving hidden, readonly or otherwise protected files may have corner cases I have not caught. Use with care.
 
@@ -50,12 +50,8 @@ File operations involving hidden, readonly or otherwise protected files may have
 `jm` is currently known to NOT run properly on at least the following environments:
 
 - Inside Mintty to a Cygwin/Msys shell: no display. This is expected, as Mintty does not provide a Windows console interface to native programs
-- `ssh` session to Ubuntu 16.04 from Windows using Git/Msys's `ssh`: corrupted display and no control keys. This seems a problem where termbox-go does not try to read terminal capabilities from `/lib/terminfo/`, where the cygwin database resides in Ubuntu. Doing `export TERMINFO=/lib/terminfo` before running `jm` seems to let it mostly work, but some corruption remains when resizing, and the cursor is never hidden. This is an easy fix in Termbox.
-- Linux subsystem for Windows: crash on startup. This seems due to WSL not supporting some fcntls (E_SETOWN/GETOWN) which Termbox requires to retrieve input via SIGIO. Once this is solved (either in WSL or by removing SIGIO from Termbox), the above TERMINFO issues may apply as well.
-
-I wrote `jm` to practice programming in Go, and to have a simple, portable and easy to build terminal file manager. It is clearly inspired by the likes of unix-focused Midnight Commander and vifm, but more adequate for my personal taste and use cases.
-
-All the code was written using the delightful [Visual Studio Code](https://code.visualstudio.com/) editor and [lukehoban's vscode-go](https://github.com/Microsoft/vscode-go/) extension.
+- `ssh` session from Windows using Git/Msys's `ssh`: corrupted display and no control keys. This seems a problem where termbox-go does not try to read terminal capabilities from `/lib/terminfo/`, where the cygwin database resides in Ubuntu and other Unix versions. Doing `export TERMINFO=/lib/terminfo` before running `jm` seems to let it mostly work, but some corruption remains when resizing, and the cursor is never hidden.
+- Linux subsystem for Windows: crash on startup. This seems due to WSL not supporting async IO in general. Some fcntls (E_SETOWN/GETOWN) which Termbox requires to retrieve input via SIGIO will fail. Once this is solved (either in WSL or by removing SIGIO from Termbox), the above TERMINFO issues may apply as well.
 
 ## Technical
 
@@ -68,12 +64,19 @@ All the code was written using the delightful [Visual Studio Code](https://code.
 - File size pretty printing: [code.cloudfoundry.org/bytefmt](https://code.cloudfoundry.org/bytefmt)
 - Rune utils: [github.com/mattn/go-runewidth](https://github.com/mattn/go-runewidth)
 
+I wrote `jm` to practice programming in Go, and to have a simple, portable and easy to build terminal file manager. It is clearly inspired by the likes of unix-focused Midnight Commander and vifm, but more adequate for my personal taste and use cases.
+
+All the code was written using the delightful [Visual Studio Code](https://code.visualstudio.com/) editor and [lukehoban's vscode-go](https://github.com/Microsoft/vscode-go/) extension.
+
 ## Future
 
+- Refactor and cleanup
+- Temporary panels for info, help and bookmarks
+- Copy/Cut/Paste style operations
 - In-app prompts to support:
   - Renaming
-  - Running commands with template variables
-- Searching
+  - Running commands with template variable substitution
+- Searching and filtering
 - Running programs and opening selected files
 - Configurable colors and keys
 - Compatibility
