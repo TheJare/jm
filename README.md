@@ -14,6 +14,8 @@ If the paths are not given in the command line and the configuration file does n
 
 DISCLAIMER: USE `JM` AT YOUR OWN RISK. None of the authors or contributors can be held responsible for any losses or damages connected to your use of this program. We have done our best to ensure correct, predictable and safe operation, but can't offer any guarantees that it will do so for you.
 
+The latest version of `jm` can usually be found at [https://github.com/TheJare/jm](https://github.com/TheJare/jm)
+
 ## Docs
 
 The interface displays two side by side panels, each with the contents of a directory. You can toggle between panels with the `TAB` key. Exit with the `q` or `ESC` keys.

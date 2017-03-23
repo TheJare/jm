@@ -83,7 +83,7 @@ func RunCommand(command string, args ...string) error {
 		args = append([]string{command}, args...)
 		finalargs = []string{"-c", strings.Join(args, " ") + " 2>&1"}
 	}
-	//fmt.Fprintf(os.Stderr, "Running command:\n>%s<\n>>%s<<\n", shell, strings.Join(finalargs, "<<\n>>"))
+	// fmt.Fprintf(os.Stderr, "Running command:\n>%s<\n>>%s<<\n", shell, strings.Join(finalargs, "<<\n>>"))
 	cmd := exec.Command(shell, finalargs...)
 
 	outp, err := cmd.StdoutPipe()
@@ -98,7 +98,7 @@ func RunCommand(command string, args ...string) error {
 	}
 	err = cmd.Wait()
 	if err != nil {
-		//fmt.Fprintf(os.Stderr, "ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
+		// fmt.Fprintf(os.Stderr, "ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
 		return fmt.Errorf("%s: %s", err, strings.Join(ret, "\n"))
 	}
 	return nil
@@ -118,9 +118,15 @@ func CommandCopy(src string, dst string) error {
 	// Many safety checks to perform here...
 	if runtime.GOOS == "windows" {
 		// We end up using xcopy because copy will NOT handle hidden files ever
-		fullDest := filepath.Join(dst, filepath.Base(src)) // Xcopy compliance, it will still ask on files
-		// so we automaticall reply via echo f | xcopy ... SO UGLY
-		return RunCommand("echo", "f", "|", "xcopy", "/Q", "/I", "/K", "/H", "/Y", "/R", "/S", "/E", src, fullDest)
+		stat, err := os.Stat(src)
+		if err != nil {
+			return err
+		}
+		if stat.IsDir() {
+			fullDest := filepath.Join(dst, filepath.Base(src))
+			return RunCommand("xcopy", "/Q", "/I", "/K", "/H", "/Y", "/R", "/S", "/E", src, fullDest)
+		}
+		return RunCommand("xcopy", "/Q", "/K", "/H", "/Y", "/R", src, dst)
 	}
 	return RunCommand("cp", "-R", src, dst)
 }
