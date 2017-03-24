@@ -2,6 +2,8 @@
 
 A simple, cross-platform terminal-based file manager written in Go.
 
+![Screencap](screencap.jpg "Jm in action")
+
 ## Usage
     jm [left path] [right path] [flags]
 
