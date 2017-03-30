@@ -83,7 +83,7 @@ func RunCommand(command string, args ...string) error {
 		args = append([]string{command}, args...)
 		finalargs = []string{"-c", strings.Join(args, " ") + " 2>&1"}
 	}
-	fmt.Fprintf(os.Stderr, "Running command:\n>%s<\n>>%s<<\n", shell, strings.Join(finalargs, "<<\n>>"))
+	// fmt.Fprintf(os.Stderr, "Running command:\n>%s<\n>>%s<<\n", shell, strings.Join(finalargs, "<<\n>>"))
 	cmd := exec.Command(shell, finalargs...)
 
 	outp, err := cmd.StdoutPipe()
@@ -98,7 +98,7 @@ func RunCommand(command string, args ...string) error {
 	}
 	err = cmd.Wait()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
+		// fmt.Fprintf(os.Stderr, "ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
 		return fmt.Errorf("%s: %s", err, strings.Join(ret, "\n"))
 	}
 	return nil
