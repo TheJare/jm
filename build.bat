@@ -1,5 +1,5 @@
 @echo off
-set JM_VER=1.0
+set JM_VER=1.1
 
 del /S /Q dist\ 2> nul
 rd /S /Q dist\ 2> nul

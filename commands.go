@@ -99,7 +99,7 @@ func RunCommand(command string, args ...string) error {
 	err = cmd.Wait()
 	if err != nil {
 		// fmt.Fprintf(os.Stderr, "ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
-		return fmt.Errorf("%s: %s", err, strings.Join(ret, "\n"))
+		return fmt.Errorf("%s -> %s: %s", strings.Join(finalargs[1:], " "), err, strings.Join(ret, " \n"))
 	}
 	return nil
 }

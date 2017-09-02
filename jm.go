@@ -278,6 +278,56 @@ var status string
 
 var bookmarks map[string]string
 
+// ClipboardType is an enum for the type of files that are stored in the clipboard
+type clipboardMode int
+
+const (
+	clipboardModeNone clipboardMode = iota
+	clipboardModeCopy
+	clipboardModeCut
+)
+
+// Clipboard manages the yanked/cut files
+type Clipboard struct {
+	Files []string
+	Mode  clipboardMode
+}
+
+// IsEmpty returns true if the clipboard contains no data
+func (c *Clipboard) IsEmpty() bool {
+	return len(c.Files) == 0
+}
+
+// Reset clears all contents of the clipboard
+func (c *Clipboard) Reset() {
+	c.Files = nil
+	c.Mode = clipboardModeNone
+}
+
+// BeginCut clears the clipbaord and initiates a Cut operation
+func (c *Clipboard) BeginCut() {
+	c.Files = nil
+	c.Mode = clipboardModeCut
+}
+
+// BeginCopy clears the clipbaord and initiates a Copy operation
+func (c *Clipboard) BeginCopy() {
+	c.Files = nil
+	c.Mode = clipboardModeCopy
+}
+
+// Add adds a new file to the clipboard if it isn't already in there
+func (c *Clipboard) Add(file string) {
+	for _, s := range c.Files {
+		if s == file {
+			return
+		}
+	}
+	c.Files = append(c.Files, file)
+}
+
+var clipboard = Clipboard{}
+
 func redrawAll() int {
 	const coldef = termbox.ColorDefault
 	termbox.Clear(coldef, coldef)
@@ -300,7 +350,15 @@ func redrawAll() int {
 	if status != "" {
 		tbprintw(0, h-1, w-1, termbox.ColorMagenta, coldef, status)
 	} else {
-		tbprintw(0, h-1, w-1, coldef, coldef, "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav] [r refresh] [c Copy] [m Move] [DD Delete] [: Shell] [b/B Bookmarks]")
+		var s = "[ESC,q quit] [TAB switch] [SPC select] [ARROWS nav] [r refresh] [c Copy] [m Move] [DD Delete] [: Shell] [b/B Bookmarks] [y/Y Yank] [x/X Cut]"
+		if !clipboard.IsEmpty() {
+			if clipboard.Mode == clipboardModeCopy {
+				s = s + fmt.Sprintf(" [p Copy %d files]", len(clipboard.Files))
+			} else if clipboard.Mode == clipboardModeCut {
+				s = s + fmt.Sprintf(" [p Move %d files]", len(clipboard.Files))
+			}
+		}
+		tbprintw(0, h-1, w-1, coldef, coldef, s)
 	}
 	status = ""
 	termbox.Flush()
@@ -423,6 +481,7 @@ mainloop:
 				}
 				break
 			} else if prefixCommand == "D" {
+				clipboard.Reset()
 				if ev.Ch == 'D' {
 					src, _ := getCommandArguments()
 					for i, s := range src {
@@ -455,9 +514,9 @@ mainloop:
 				ap.Cursor -= pagesize
 			} else if ev.Key == termbox.KeyPgdn || ev.Ch == 'i' {
 				ap.Cursor += pagesize
-			} else if ev.Key == termbox.KeyHome || ev.Ch == 'y' {
+			} else if ev.Key == termbox.KeyHome || ev.Ch == 'U' {
 				ap.Cursor = 0
-			} else if ev.Key == termbox.KeyEnd || ev.Ch == 'o' {
+			} else if ev.Key == termbox.KeyEnd || ev.Ch == 'I' {
 				if len(ap.Entries) > 0 {
 					ap.Cursor = len(ap.Entries) - 1
 				}
@@ -511,6 +570,7 @@ mainloop:
 					newCommand = "B"
 				}
 			} else if ev.Ch == 'c' {
+				clipboard.Reset()
 				if ap.Cwd == op.Cwd {
 					// Maybe add a way to duplicate files?
 					break
@@ -528,6 +588,7 @@ mainloop:
 					ap.Refresh()
 				}
 			} else if ev.Ch == 'm' {
+				clipboard.Reset()
 				if ap.Cwd == op.Cwd {
 					break
 				}
@@ -538,6 +599,54 @@ mainloop:
 					if err != nil {
 						status = status + " " + err.Error()
 					}
+				}
+				ap.Refresh()
+				op.Refresh()
+			} else if ev.Ch == 'x' || ev.Ch == 'X' {
+				if ev.Ch == 'x' || clipboard.Mode != clipboardModeCut {
+					clipboard.BeginCut()
+				}
+				src, _ := getCommandArguments()
+				for _, s := range src {
+					clipboard.Add(s)
+				}
+			} else if ev.Ch == 'y' || ev.Ch == 'Y' {
+				if ev.Ch == 'y' || clipboard.Mode != clipboardModeCopy {
+					clipboard.BeginCopy()
+				}
+				src, _ := getCommandArguments()
+				for _, s := range src {
+					clipboard.Add(s)
+				}
+			} else if ev.Ch == 'p' {
+				if clipboard.IsEmpty() {
+					break
+				}
+
+				dst := ap.Cwd
+				var newClipboard []string
+				for i, s := range clipboard.Files {
+
+					var err error
+
+					if clipboard.Mode == clipboardModeCopy {
+						redrawStatus(fmt.Sprintf("Copying file %d/%d: %s", i+1, len(clipboard.Files), s))
+						err = CommandCopy(s, dst)
+					} else {
+						redrawStatus(fmt.Sprintf("Moving file %d/%d: %s", i+1, len(clipboard.Files), s))
+						err = CommandMove(s, dst)
+					}
+					if err != nil {
+						status = status + " " + err.Error()
+						newClipboard = append(newClipboard, s)
+					} else {
+						_, file := filepath.Split(s)
+						newClipboard = append(newClipboard, filepath.Join(dst, file))
+					}
+				}
+				clipboard.Files = nil
+				for _, s := range newClipboard {
+					clipboard.Add(s)
 				}
 				ap.Refresh()
 				op.Refresh()

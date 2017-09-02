@@ -6,6 +6,7 @@ import (
 	"syscall"
 )
 
+// GetDrives returns a map of drive letters (uppercase) to boolean indicating if it's present or not
 func GetDrives() (map[rune]bool, error) {
 	drives := make(map[rune]bool)
 	kernel32, err := syscall.LoadDLL("kernel32.dll")

@@ -1,4 +1,4 @@
-# JM
+# JM 1.1
 
 A simple, cross-platform terminal-based file manager written in Go.
 
@@ -26,8 +26,8 @@ The interface displays two side by side panels, each with the contents of a dire
 
 - `Up`/`Down arrows`, `Page Up`/`Page Down`, and `Home`/`End` keys let you navigate up and down the files in the current panel.
 - `Left arrow` goes to the parent directory, `Right arrow` enters the directory the cursor is on.
-- Alternatives for these keys are `h`, `j`, `k` & `l` for the arrows (for you `vi` lovers), `u` & `i` for PgUp/PgDn, and `y` & `p` for Home/End.
-- `b` followed by a digit jumps to a bookmark. On Windows, letters refer to the system drives. `/` jumps to the root, and `~` jumps to the user's home directory.
+- Alternatives for these keys are `h`, `j`, `k` & `l` for the arrows (for you `vi` lovers), `u` & `i` for PgUp/PgDn, and `U` & `I` for Home/End.
+- `b` followed by a character jumps to a bookmark. A digit refers to a recordable bookmark (via `B` command). On Windows, letters refer to the system drives. `/` jumps to the root, and `~` jumps to the user's home directory.
 - `B` followed by a digit saves the current path to that bookmark.
 - `Space` toggles selection of the current file/folder, `a` selects all or clears the selection.
 
@@ -36,6 +36,9 @@ The interface displays two side by side panels, each with the contents of a dire
 - `c` copies the selected files/folders (or the file at the cursor if there's no selection) from the current panel to the other.
 - `m` moves the selected files.
 - `DD` (`Shift+d` twice) deletes the selected files.
+- `y` records the current selection to the internal clipboard for copying. `Y` adds files to the existing clipboard if it's in copy mode, otherwise functions just like `y`.
+- `x` records the current selection to the internal clipboard for moving. `X` adds files to the existing clipboard if it's in move mode, otherwise functions just like `x`.
+- `p` will copy or move the files from the internal clipboard, if there are any, into the current directory. The clipboard will update to reflect the copied/moved files, so if you perform a move into the wrong directory, you can repeat that move later into the correct one.
 
 Operations targeting the root folder are aborted for safety reasons.
 
@@ -70,13 +73,12 @@ File operations involving hidden, readonly or otherwise protected files may have
 
 I wrote `jm` to practice programming in Go, and to have a simple, portable and easy to build terminal file manager. It is clearly inspired by the likes of unix-focused Midnight Commander and vifm, but more adequate for my personal taste and use cases.
 
-All the code was written using the delightful [Visual Studio Code](https://code.visualstudio.com/) editor and [lukehoban's vscode-go](https://github.com/Microsoft/vscode-go/) extension.
+All the code was written and debugged using the delightful [Visual Studio Code](https://code.visualstudio.com/) editor and [lukehoban's vscode-go](https://github.com/Microsoft/vscode-go/) extension.
 
 ## Future
 
 - Refactor and cleanup
 - Temporary panels for info, help and bookmarks
-- Copy/Cut/Paste style operations
 - In-app prompts to support:
   - Renaming
   - Running commands with template variable substitution
