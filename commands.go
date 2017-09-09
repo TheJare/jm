@@ -148,7 +148,7 @@ func CommandCopy(src string, dst string) error {
 		}
 		return RunCommand("xcopy", "/Q", "/K", "/H", "/Y", "/R", quoteString(src), quoteString(dst))
 	}
-	return RunCommand("cp", "-R", quoteString(src), quoteString(dst))
+	return RunCommand("cp", "-R", src, dst)
 }
 
 // CommandMove moves a given file or folder into the target folder
@@ -179,7 +179,7 @@ func CommandMove(src string, dst string) error {
 		}
 		return err
 	}
-	return RunCommand("mv", "-f", quoteString(src), quoteString(dst))
+	return RunCommand("mv", "-f", src, dst)
 }
 
 // CommandDelete deletes a given file or folder
@@ -204,5 +204,5 @@ func CommandDelete(dst string) error {
 		}
 		return err
 	}
-	return RunCommand("rm", "-rf", quoteString(dst))
+	return RunCommand("rm", "-rf", dst)
 }
