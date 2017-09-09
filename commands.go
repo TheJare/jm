@@ -67,41 +67,61 @@ func RunShell(cwd string) error {
 func RunCommand(command string, args ...string) error {
 	var ret []string
 	var finalargs []string
-	shell, ok := os.LookupEnv("COMSPEC")
-	if ok {
-		finalargs = append([]string{"/C"}, command)
-		finalargs = append(finalargs, args...)
-		finalargs = append(finalargs, "2>&1")
+	var shell string
+	if runtime.GOOS == "windows" {
+		sh, ok := os.LookupEnv("COMSPEC")
+		if !ok {
+			shell = "C:\\Windows\\System32\\cmd.exe"
+		}
+		shell = sh
+		args = append([]string{command}, args...)
+		finalargs = []string{"/C", strings.Join(args, " ") + " 2>&1"}
 	} else {
-		shell, ok = os.LookupEnv("SHELL")
+		sh, ok := os.LookupEnv("SHELL")
 		if !ok {
 			shell = "/bin/sh"
 		}
+		shell = sh
 		for i, v := range args {
 			args[i] = strconv.Quote(v)
 		}
 		args = append([]string{command}, args...)
 		finalargs = []string{"-c", strings.Join(args, " ") + " 2>&1"}
 	}
-	// fmt.Fprintf(os.Stderr, "Running command:\n>%s<\n>>%s<<\n", shell, strings.Join(finalargs, "<<\n>>"))
+	Logf("Running command:\n>%s<\n>>%s<<\n", shell, strings.Join(finalargs, "<<\n>>"))
 	cmd := exec.Command(shell, finalargs...)
+
+	// See comment in sys_windows.go for this
+	SetProcCmdline(cmd, strings.Join(finalargs, " "))
 
 	outp, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("Failed to attach stdout: %v", err)
 	}
-	cmd.Start()
+	err = cmd.Start()
+	if err != nil {
+		Logf("ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
+		return fmt.Errorf("%s -> %s: %s", strings.Join(finalargs[1:], " "), err, strings.Join(ret, " \n"))
+	}
 	scanner := bufio.NewScanner(outp)
 	for scanner.Scan() {
 		line := scanner.Text()
 		ret = append(ret, line)
 	}
 	err = cmd.Wait()
+	Logf("Output: %s\n", strings.Join(ret, "\n"))
 	if err != nil {
-		// fmt.Fprintf(os.Stderr, "ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
+		Logf("ERROR: %s: %s\n", err, strings.Join(ret, "\n"))
 		return fmt.Errorf("%s -> %s: %s", strings.Join(finalargs[1:], " "), err, strings.Join(ret, " \n"))
 	}
 	return nil
+}
+
+func quoteString(src string) string {
+	if l := len(src); l > 2 && src[0] != '"' && src[l-1] != '"' {
+		return "\"" + src + "\""
+	}
+	return src
 }
 
 // CommandCopy copies a given file or folder into the target folder
@@ -124,11 +144,11 @@ func CommandCopy(src string, dst string) error {
 		}
 		if stat.IsDir() {
 			fullDest := filepath.Join(dst, filepath.Base(src))
-			return RunCommand("xcopy", "/Q", "/I", "/K", "/H", "/Y", "/R", "/S", "/E", src, fullDest)
+			return RunCommand("xcopy", "/Q", "/I", "/K", "/H", "/Y", "/R", "/S", "/E", quoteString(src), quoteString(fullDest))
 		}
-		return RunCommand("xcopy", "/Q", "/K", "/H", "/Y", "/R", src, dst)
+		return RunCommand("xcopy", "/Q", "/K", "/H", "/Y", "/R", quoteString(src), quoteString(dst))
 	}
-	return RunCommand("cp", "-R", src, dst)
+	return RunCommand("cp", "-R", quoteString(src), quoteString(dst))
 }
 
 // CommandMove moves a given file or folder into the target folder
@@ -149,7 +169,7 @@ func CommandMove(src string, dst string) error {
 	// Many safety checks to perform here...
 	if runtime.GOOS == "windows" {
 		// hidden files will wreak havoc with move across devices
-		err := RunCommand("move", "/Y", src, dst)
+		err := RunCommand("move", "/Y", quoteString(src), quoteString(dst))
 		if err != nil {
 			// So if we get any errors we retry via copy & delete
 			err = CommandCopy(src, dst)
@@ -159,7 +179,7 @@ func CommandMove(src string, dst string) error {
 		}
 		return err
 	}
-	return RunCommand("mv", "-f", src, dst)
+	return RunCommand("mv", "-f", quoteString(src), quoteString(dst))
 }
 
 // CommandDelete deletes a given file or folder
@@ -175,14 +195,14 @@ func CommandDelete(dst string) error {
 	if runtime.GOOS == "windows" {
 		// Deleting files in directories and deleting directories are two
 		// separate things :(
-		err := RunCommand("del", "/Q", "/A", "/F", dst)
+		err := RunCommand("del", "/Q", "/A", "/F", quoteString(dst))
 		if err == nil {
 			// Must ignore the error because dst may have been fully deleted by prev command
 			// UGH
 			/*err = */
-			RunCommand("rd", "/S", "/Q", dst)
+			RunCommand("rd", "/S", "/Q", quoteString(dst))
 		}
 		return err
 	}
-	return RunCommand("rm", "-rf", dst)
+	return RunCommand("rm", "-rf", quoteString(dst))
 }

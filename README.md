@@ -1,4 +1,4 @@
-# JM 1.1
+# JM 1.1.1
 
 A simple, cross-platform terminal-based file manager written in Go.
 

@@ -17,6 +17,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -33,6 +34,10 @@ import (
 
 	"code.cloudfoundry.org/bytefmt"
 )
+
+// ------------------
+
+const version = "1.1.1"
 
 // ------------------
 
@@ -234,10 +239,11 @@ func (p *Panel) Render(x, w, h int, active bool) {
 
 // ClampPos limits the state of the panel to valid values
 func (p *Panel) ClampPos(h int) {
-	if p.Cursor <= 0 {
-		p.Cursor = 0
-	} else if p.Cursor >= len(p.Entries) {
+	if p.Cursor >= len(p.Entries) {
 		p.Cursor = len(p.Entries) - 1
+	}
+	if p.Cursor < 0 {
+		p.Cursor = 0
 	}
 	if p.Cursor < p.Top {
 		p.Top = p.Cursor
@@ -640,7 +646,7 @@ mainloop:
 						status = status + " " + err.Error()
 						newClipboard = append(newClipboard, s)
 					} else {
-						_, file := filepath.Split(s)
+						file := filepath.Base(s)
 						newClipboard = append(newClipboard, filepath.Join(dst, file))
 					}
 				}
@@ -675,11 +681,31 @@ mainloop:
 
 // ------------------
 
+var showVersion = false
+var logVerbose = false
+
+var logFile io.Writer
+
+// Logf writes to the log file if it is enabled
+func Logf(args ...interface{}) {
+	if logFile != nil {
+		fmt.Fprintf(logFile, args[0].(string), args[1:]...)
+	}
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "jm [left path] [right path]",
 	Short: "jm is a small terminal-based file manager",
 	Long:  `A simple and small terminal-based file manager that tries to be friendly`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if showVersion {
+			fmt.Println("jm version " + version)
+			os.Exit(0)
+		}
+		if logVerbose {
+			home, _ := homedir.Dir()
+			logFile, _ = os.Create(filepath.Join(home, ".jm-log"))
+		}
 		// Read config file
 		viper.SetConfigFile(configFile)
 		viper.SetConfigType("json")
@@ -720,6 +746,8 @@ func main() {
 	home, _ := homedir.Dir()
 	configFile = filepath.Join(home, ".jm")
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", configFile, "config file")
+	rootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "V", showVersion, "print version")
+	rootCmd.PersistentFlags().BoolVarP(&logVerbose, "log", "l", logVerbose, "verbose log to .jm-log file")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

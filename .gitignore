@@ -3,3 +3,4 @@
 /jm.exe
 *.log
 /dist
+.vscode

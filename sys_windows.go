@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os/exec"
 	"syscall"
 )
 
@@ -26,4 +27,14 @@ func GetDrives() (map[rune]bool, error) {
 		bitmask >>= 1
 	}
 	return drives, nil
+}
+
+// SetProcCmdline sets the command line on windows to the string,
+// which will make the process ignore the array of arguments given
+// We need this on windows to avoid MSVCRT quoting since we are
+// actually calling CMD, not a random MSVCRT program.
+// See http://daviddeley.com/autohotkey/parameters/parameters.htm#WIN
+func SetProcCmdline(cmd *exec.Cmd, cmdline string) {
+	cmd.SysProcAttr = new(syscall.SysProcAttr)
+	cmd.SysProcAttr.CmdLine = cmdline
 }
