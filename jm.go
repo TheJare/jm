@@ -747,7 +747,7 @@ func main() {
 	configFile = filepath.Join(home, ".jm")
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", configFile, "config file")
 	rootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "V", showVersion, "print version")
-	rootCmd.PersistentFlags().BoolVarP(&logVerbose, "log", "l", logVerbose, "verbose log to .jm-log file")
+	rootCmd.PersistentFlags().BoolVarP(&logVerbose, "log", "l", logVerbose, `verbose log (to file "`+filepath.Join(home, ".jm-log")+`")`)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

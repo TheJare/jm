@@ -9,6 +9,8 @@ A simple, cross-platform terminal-based file manager written in Go.
 
     Flags
       -c, --config string   config file (default "$HOME/.jm")
+      -l, --log             verbose log (to "$HOME/.jm-log" file)
+      -V, --version         print version
 
 The configuration file contains the state of your last session. It is read on startup and saved when you quit.
 
